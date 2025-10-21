@@ -80,11 +80,3 @@ def get_transcript():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
-```
-
-**requirements.txt:**
-```
-flask==3.0.0
-yt-dlp==2024.8.6
-requests==2.31.0
-gunicorn==21.2.0
