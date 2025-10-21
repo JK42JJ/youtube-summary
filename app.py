@@ -1,7 +1,18 @@
 from flask import Flask, request, jsonify
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 app = Flask(__name__)
+
+# 타임아웃 설정
+def get_session():
+    session = requests.Session()
+    retry = Retry(total=3, backoff_factor=1)
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount('http://', adapter)
+    session.mount('https://', adapter)
+    return session
 
 @app.route('/')
 def home():
@@ -19,16 +30,21 @@ def get_transcript():
     url = f'https://www.youtube.com/api/timedtext?lang={lang}&v={video_id}&fmt=json3'
     
     try:
-        response = requests.get(url, headers={
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        })
+        session = get_session()
+        response = session.get(
+            url, 
+            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'},
+            timeout=30  # 30초 타임아웃
+        )
         
         if response.status_code != 200:
             # 한국어 자막이 없으면 영어 시도
             url = f'https://www.youtube.com/api/timedtext?lang=en&v={video_id}&fmt=json3'
-            response = requests.get(url, headers={
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            })
+            response = session.get(
+                url, 
+                headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'},
+                timeout=30
+            )
         
         if response.status_code != 200:
             return jsonify({'error': 'No subtitles available'}), 404
@@ -47,9 +63,11 @@ def get_transcript():
             'video_id': video_id,
             'language': lang,
             'transcript': ' '.join(text_only),
-            'full_data': data
+            'text_length': len(' '.join(text_only))
         })
         
+    except requests.Timeout:
+        return jsonify({'error': 'Request timeout'}), 504
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
