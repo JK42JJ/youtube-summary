@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api._errors import TranscriptsDisabled, NoTranscriptFound, VideoUnavailable
+import traceback
 
 app = Flask(__name__)
 
@@ -17,8 +18,17 @@ def get_transcript():
         return jsonify({'error': 'video_id parameter required'}), 400
     
     try:
-        # 자막 가져오기
+        # 자막 리스트 가져오기
         transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+        
+        # 사용 가능한 자막 언어 확인
+        available_transcripts = []
+        for transcript in transcript_list:
+            available_transcripts.append({
+                'language': transcript.language,
+                'language_code': transcript.language_code,
+                'is_generated': transcript.is_generated
+            })
         
         # 원하는 언어 찾기
         try:
@@ -31,7 +41,8 @@ def get_transcript():
             except NoTranscriptFound:
                 return jsonify({
                     'error': 'No transcript found in requested language',
-                    'video_id': video_id
+                    'video_id': video_id,
+                    'available_languages': available_transcripts
                 }), 404
         
         # 자막 텍스트 가져오기
@@ -45,13 +56,15 @@ def get_transcript():
             'language': lang,
             'transcript': text_only,
             'text_length': len(text_only),
-            'segment_count': len(transcript_data)
+            'segment_count': len(transcript_data),
+            'available_languages': available_transcripts
         })
         
     except TranscriptsDisabled:
         return jsonify({
             'error': 'Transcripts are disabled for this video',
-            'video_id': video_id
+            'video_id': video_id,
+            'note': 'This video has subtitles disabled by the uploader'
         }), 404
     except VideoUnavailable:
         return jsonify({
@@ -59,10 +72,12 @@ def get_transcript():
             'video_id': video_id
         }), 404
     except Exception as e:
+        # 전체 에러 traceback 반환
         return jsonify({
             'error': str(e),
             'video_id': video_id,
-            'error_type': type(e).__name__
+            'error_type': type(e).__name__,
+            'traceback': traceback.format_exc()
         }), 500
 
 if __name__ == '__main__':
